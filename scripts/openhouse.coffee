@@ -19,6 +19,7 @@
 #   tianwei.liu <tianwei.liu@target.com>
 
 #require('dotenv').load()
+moment = require('moment-timezone')
 
 module.exports = (robot) ->
 	robot.on "issue", (query) ->
@@ -33,6 +34,17 @@ module.exports = (robot) ->
 	robot.respond /openhouse search (.*)/i, (res) ->
 		readSheet res, {
 			subject: [value: res.match[1]]
+		}
+
+	robot.respond /openhouse time (.*)/i, (res) ->
+		try
+			searchtime = new Date(res.match[1]).toISOString()
+		catch err
+			res.send "i can't understand that time format"
+			console.log err
+			return
+		readSheet res, {
+			datetime: [type:'value', grain:'day', value: searchtime]
 		}
 
 	readSheet = (res, filters) ->
@@ -58,6 +70,7 @@ module.exports = (robot) ->
 						res.send "i couldn't read the spreadsheet."
 						console.log "error reading spreadsheet #{err}"
 					else
+						console.log "spreadsheet received: #{JSON.stringify(rows)}"
 						sheetFilter res, rows, filters
 
 	sheetFilter = (res, rows, filters) ->
@@ -89,20 +102,22 @@ module.exports = (robot) ->
 	containTime = (row, datetimes) ->
 		return true unless datetimes?
 		timestamp = new Date(row[3])
+		timestamp = moment.tz(timestamp, process.env.OPEN_HOUSE_TIMEZONE)
 		for datetime in datetimes
 			switch datetime.type
 				when "value"
 					switch datetime.grain
 						when "day"
-							day = new Date(datetime.value)
-							nextDay = new Date(datetime.value) + new Date(86400000)
-							return true if day <= timestamp <= nextDay
+							day = moment(datetime.value)
+							nextDay = moment(datetime.value).add(1, 'days')
+							return true if timestamp.isBetween(day, nextDay)
 						else
-							return true if timestamp == new Date(datetime.value)
+							search = moment(datetime.value)
+							return true if moment().duration(timestamp.diff(search)).hours <= 1
 				when "interval"
-					from = new Date(datetime.from.value)
-					to = new Date(datetime.to.value)
-					return true if from <= timestamp <= to
+					from = moment(datetime.from.value)
+					to = moment(datetime.to.value)
+					return true if timestamp.isBetween(from, to)
 		return false
 
 	rowContains = (row, searchStr) ->
