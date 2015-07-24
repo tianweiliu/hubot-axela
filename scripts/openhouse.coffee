@@ -18,7 +18,7 @@
 # Author:
 #   tianwei.liu <tianwei.liu@target.com>
 
-require('dotenv').load()
+#require('dotenv').load()
 moment = require('moment-timezone')
 
 module.exports = (robot) ->
