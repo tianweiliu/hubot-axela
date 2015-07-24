@@ -7,7 +7,7 @@
 #		HUBOT_GOOGLE_KEY
 #
 # Commands:
-#		hey hubot method - Ask "hey hubot, is there anything happened to the table yesterday?"
+#		hey hubot <dialog> - Ask "hey hubot, is there anything happened to the table yesterday?"
 #   openhouse issues	- Report all issues in the log
 #		openhouse search <query> - Report issues with search query (supports regular expression)
 #		openhouse time <query> - Report issues happened at a specific time (<query> has to be a time string)
@@ -18,7 +18,7 @@
 # Author:
 #   tianwei.liu <tianwei.liu@target.com>
 
-#require('dotenv').load()
+require('dotenv').load()
 moment = require('moment-timezone')
 
 module.exports = (robot) ->
@@ -38,13 +38,15 @@ module.exports = (robot) ->
 
 	robot.respond /openhouse time (.*)/i, (res) ->
 		try
-			searchtime = new Date(res.match[1]).toISOString()
+			dateObj = new Date(res.match[1])
+			searchtime = moment(dateObj)
 		catch err
 			res.send "i can't understand that time format"
 			console.log err
 			return
+		console.log "search: #{searchtime.format()}"
 		readSheet res, {
-			datetime: [type:'value', grain:'day', value: searchtime]
+			datetime: [type:'value', grain:'hour', value: searchtime.format()]
 		}
 
 	readSheet = (res, filters) ->
@@ -101,8 +103,9 @@ module.exports = (robot) ->
 
 	containTime = (row, datetimes) ->
 		return true unless datetimes?
-		timestamp = new Date(row[3])
-		timestamp = moment.tz(timestamp, process.env.OPEN_HOUSE_TIMEZONE)
+		dateObj = new Date(row[3])
+		timestamp = moment(dateObj)
+		console.log "timestamp converted from #{row[3]} to #{timestamp.format()}"
 		for datetime in datetimes
 			switch datetime.type
 				when "value"
@@ -112,8 +115,12 @@ module.exports = (robot) ->
 							nextDay = moment(datetime.value).add(1, 'days')
 							return true if timestamp.isBetween(day, nextDay)
 						else
-							search = moment(datetime.value)
-							return true if moment().duration(timestamp.diff(search)).hours <= 1
+							timeStr = datetime.value.substr(0, datetime.value.length - 6) + moment().format("Z")
+							dateObj = new Date(timeStr)
+							search = moment(dateObj)
+							console.log "search: #{search.format()}"
+							console.log "diff with search: #{timestamp.diff(search, "hours")}"
+							return true if -1 <= timestamp.diff(search, "hours") <= 1
 				when "interval"
 					from = moment(datetime.from.value)
 					to = moment(datetime.to.value)
